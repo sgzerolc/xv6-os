@@ -2,13 +2,11 @@
 #include "kernel/stat.h"
 #include "user/user.h"
 
-int 
-main () {
+int main () {
     int fds[2];
     int buff[1];
     int pid;
 
-    // create a pipe, with two fds in fds[0]. fds[1].
     pipe(fds);
 
     pid = fork();
@@ -21,5 +19,5 @@ main () {
         printf("%d: received pong\n", getpid());
         exit(0);
     }
-
+    
 }
