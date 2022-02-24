@@ -89,8 +89,8 @@ uint64 kfreemem(void){
 
   acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r){
-    kmem.freelist = r->next;
+  while(r){
+    r = r->next;
     page += 1;
   }
   release(&kmem.lock);

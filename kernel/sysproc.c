@@ -116,13 +116,14 @@ sys_sysinfo(void)
   if (argaddr(0, &addr) < 0)
     return -1;
 
-  struct sysinfo sinfo;
-  sinfo.freemem = kfreemem();
-  sinfo.nproc = knproc();
+  struct sysinfo info;
+  info.freemem = kfreemem();
+  info.nproc = knproc();
 
   // user address
-  if (copyout(myproc()->pagetable, addr, (char *)&sinfo, sizeof(sinfo) < 0)){
+  if (copyout(myproc()->pagetable, addr, (char *)&info, sizeof(info)) < 0){
     return -1;
   }
   return 0;
+
 }
