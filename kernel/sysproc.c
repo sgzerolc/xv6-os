@@ -6,6 +6,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "sysinfo.h"
 
 uint64
 sys_exit(void)
@@ -94,4 +95,34 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+// return the user process argument.
+uint64 
+sys_trace(void)
+{
+  int arg;
+  if(argint(0, &arg) < 0)   // fetch user process's argument as a pointer
+    return -1;
+  myproc()->mask = arg;
+  return 0;
+}
+
+// copy sysinfo back to user space
+uint64
+sys_sysinfo(void)
+{
+  uint64 addr;   // fetch user argument address
+  if (argaddr(0, &addr) < 0)
+    return -1;
+
+  struct sysinfo sinfo;
+  sinfo.freemem = kfreemem();
+  sinfo.nproc = knproc();
+
+  // user address
+  if (copyout(myproc()->pagetable, addr, (char *)&sinfo, sizeof(sinfo) < 0)){
+    return -1;
+  }
+  return 0;
 }
