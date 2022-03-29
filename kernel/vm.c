@@ -17,12 +17,20 @@ extern char trampoline[]; // trampoline.S
 
 /*
  * create a direct-map page table for the kernel.
+ * modified: add a kernel page table for a new process.
  */
+//pagetable_t
 void
 kvminit()
 {
+//  kernel_pagetable = (pagetable_t) kalloc();
+//  pagetable_t kpgtbl;
+//  kpgtbl = (pagetable_t) kalloc();
+//  memset(kpgtbl, 0, PGSIZE);
+
   kernel_pagetable = (pagetable_t) kalloc();
   memset(kernel_pagetable, 0, PGSIZE);
+
 
   // uart registers
   kvmmap(UART0, UART0, PGSIZE, PTE_R | PTE_W);
@@ -45,6 +53,8 @@ kvminit()
   // map the trampoline for trap entry/exit to
   // the highest virtual address in the kernel.
   kvmmap(TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
+
+//  return kpgtbl;
 }
 
 // Switch h/w page table register to the kernel's page table,
@@ -439,4 +449,34 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+
+// print the page table in the format of three-level tree.
+int vmprint(pagetable_t pagetable){
+  // naive approach: iterations
+    printf("page table %p\n", pagetable);
+    for(int i = 0; i < 512; i++){
+      pte_t pte = pagetable[i];
+      if(pte & PTE_V){
+          uint64 child = PTE2PA(pte);
+          printf("..%d: pte %p pa %p\n", i, pte, child);
+          for(int j = 0; j < 512; j++){
+            pte_t pte = ((pagetable_t)child)[j];
+            if(pte & PTE_V){
+              uint64 gchild = PTE2PA(pte);
+              printf(".. ..%d: pte %p pa %p\n", j, pte, gchild);
+              for(int k = 0; k < 512; k++){
+                pte_t pte = ((pagetable_t)gchild)[k];
+                if(pte & PTE_V){
+                  uint64 ggc = PTE2PA(pte);
+                  printf(".. .. ..%d: pte %p pa %p\n", k, pte, ggc); 
+                }
+              }
+            }
+          }
+            // vmprint((pagetable_t)child);   // walk down to a lower-level page table
+        }
+    }
+    return 0;
 }
