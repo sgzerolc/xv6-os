@@ -121,23 +121,17 @@ found:
     return 0;
   }
 
-  // Add a mapping for each process's kernel stack
-//  struct proc *i;
-//  for(i = p; i < &proc[NPROC]; i++){
-//      initlock(&i->lock, "p");
-//
-////       Allocate a page for the process's kernel stack.
-////       Map it high in memory, followed by an invalid
-////       guard page.
-//      char *pa = kalloc();
-//      if(pa == 0)
-//          panic("kalloc");
-//      uint64 va = KSTACK((int) (p - proc));
-//      kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
-//      p->kstack = va;
-//  }
   // Add a kernel page table
-//  p->kpgtbl = kvminit();
+  p->kpgtbl = kvminit();
+  // Allocate a page for the process's kernel stack.
+  // Map it high in memory, followed by an invalid
+  // guard page.
+  char *pa = kalloc();
+  if(pa == 0)
+      panic("kalloc");
+  uint64 va = KSTACK((int) (p - proc));
+  kvmmap(va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
+  p->kstack = va;
 
   // Set up new context to start executing at forkret,
   // which returns to user space.
@@ -151,6 +145,8 @@ found:
 // free a proc structure and the data hanging from it,
 // including user pages.
 // p->lock must be held.
+// naive way to free a kpt: a whole pagetable.
+// Get real: free the page table page, not the physical memory pages.
 static void
 freeproc(struct proc *p)
 {
@@ -158,12 +154,12 @@ freeproc(struct proc *p)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
   if(p->pagetable)
-    proc_freepagetable(p->pagetable, p->sz);
+      proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
-  // naive way to free a kpt
-//  if (p->kpgtbl)
-//      proc_freepagetable(p->kpgtbl, p->sz);
-//  p->kpgtbl = 0;
+  if(p->kpgtbl)
+      uvmunmap(p->kpgtbl, p->kstack, 1, 0);
+  p->kpgtbl = 0;
+  p->kstack = 0;
 
   p->sz = 0;
   p->pid = 0;
@@ -478,18 +474,20 @@ wait(uint64 addr)
 //  - swtch to start running that process.
 //  - eventually that process transfers control
 //    via swtch back to the scheduler.
+// Modified: switch kernel page tables when switching processes.
 void
 scheduler(void)
 {
   struct proc *p;
   struct cpu *c = mycpu();
-  
+
   c->proc = 0;
   for(;;){
     // Avoid deadlock by ensuring that devices can interrupt.
     intr_on();
     
     int found = 0;
+
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
       if(p->state == RUNNABLE) {
@@ -498,15 +496,15 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+        c->proc->kpgtbl = p->kpgtbl;
+        w_satp(MAKE_SATP(p->kpgtbl));
+        sfence_vma();
         swtch(&c->context, &p->context);
-        // Load registers into the core's satp register
-//        w_satp(MAKE_SATP(p->kpgtbl));
-//        sfence_vma();
-
         // Process is done running for now.
         // It should have changed its p->state before coming back.
-        // Switch kernel page table when switching processes
-//        c->proc->kpgtbl = p->kpgtbl;
+        w_satp(MAKE_SATP(c->proc->kpgtbl));
+        sfence_vma();
+//        p->state = SLEEPING;
         c->proc = 0;
         found = 1;
       }
@@ -521,6 +519,7 @@ scheduler(void)
     ;
 #endif
   }
+  printf("done running scheduler\n");
 }
 
 // Switch to scheduler.  Must hold only p->lock
